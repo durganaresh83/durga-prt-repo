@@ -1,0 +1,12 @@
+{
+  "name": "node-bluegreen-app",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"no unit tests configured - add jest/mocha here\" && exit 0"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

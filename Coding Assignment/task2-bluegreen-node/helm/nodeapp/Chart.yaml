@@ -1,0 +1,6 @@
+apiVersion: v2
+name: nodeapp
+description: Node.js app Helm chart supporting Blue/Green deployment on EKS
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

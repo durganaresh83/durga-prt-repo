@@ -1,0 +1,84 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION      = 'us-east-1'
+        ECR_REPO        = 'REPLACE_WITH_ECR_REPO_URL'          // e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/durga-prt-flask-eks-demo-app
+        CLUSTER_NAME    = 'durga-prt-flask-eks-demo'
+        IMAGE_TAG       = "${env.BUILD_NUMBER}"
+        AWS_CREDS       = credentials('aws-jenkins-creds')      // Jenkins credential ID (access key/secret)
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install & Unit Test') {
+            steps {
+                dir('task1-flask-eks/app') {
+                    sh '''
+                        python3 -m venv venv
+                        . venv/bin/activate
+                        pip install -r requirements.txt
+                        pytest --junitxml=test-results.xml
+                    '''
+                }
+            }
+            post {
+                always {
+                    junit 'task1-flask-eks/app/test-results.xml'
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                dir('task1-flask-eks/app') {
+                    sh "docker build -t ${ECR_REPO}:${IMAGE_TAG} ."
+                }
+            }
+        }
+
+        stage('Scan Image') {
+            steps {
+                sh "trivy image --exit-code 0 --severity HIGH,CRITICAL ${ECR_REPO}:${IMAGE_TAG} || true"
+            }
+        }
+
+        stage('Push to ECR') {
+            steps {
+                sh '''
+                    aws ecr get-login-password --region $AWS_REGION | \
+                        docker login --username AWS --password-stdin $ECR_REPO
+                    docker push ${ECR_REPO}:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Deploy to EKS') {
+            steps {
+                sh '''
+                    aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
+                    sed -i "s|REPLACE_WITH_ECR_IMAGE_URI:REPLACE_WITH_TAG|${ECR_REPO}:${IMAGE_TAG}|g" task1-flask-eks/k8s/deployment.yaml
+                    kubectl apply -f task1-flask-eks/k8s/namespace.yaml
+                    kubectl apply -f task1-flask-eks/k8s/deployment.yaml
+                    kubectl apply -f task1-flask-eks/k8s/service.yaml
+                    kubectl rollout status deployment/durga-prt-flask-app -n durga-prt-flask-app --timeout=120s
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Deployment succeeded: build ${IMAGE_TAG} is live on EKS."
+        }
+        failure {
+            echo "Pipeline failed - check console output above."
+        }
+    }
+}

@@ -1,0 +1,5 @@
+# metrics-server is required for the HPA to read CPU/memory usage.
+# Simplest path: install via the upstream manifest (no local Helm dependency):
+#   kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# This file documents the one non-default flag EKS commonly needs:
+#   --kubelet-insecure-tls   (add to the metrics-server container args if using self-signed kubelet certs)

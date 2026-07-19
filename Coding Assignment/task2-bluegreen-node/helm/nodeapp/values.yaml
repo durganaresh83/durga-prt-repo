@@ -1,0 +1,25 @@
+# Default values - overridden per-environment via --set or values-blue.yaml / values-green.yaml
+image:
+  repository: 975050024946.dkr.ecr.us-east-1.amazonaws.com/durga-prt-flask-eks-demo-app
+  tag: latest
+  pullPolicy: IfNotPresent
+
+color: blue          # "blue" or "green" - drives labels/selectors and the DEPLOY_COLOR env var
+replicaCount: 2
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 3000
+
+# Set true only for the color that should currently receive live traffic.
+# The "active" Service selector is generated from whichever color has activeColor == color.
+activeColor: blue
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi

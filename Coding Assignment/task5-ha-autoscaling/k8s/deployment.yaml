@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ha-app
+  namespace: ha-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: ha-app }
+  template:
+    metadata:
+      labels: { app: ha-app }
+    spec:
+      # Spread pods across AZs/nodes for real HA, not just replica count
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: ha-app }
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels: { app: ha-app }
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: ha-app
+          image: 975050024946.dkr.ecr.us-east-1.amazonaws.com/ha-autoscale-demo:task5-1
+          imagePullPolicy: Always
+          ports: [{ containerPort: 5000 }]
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 5000 }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 5000 }
+            initialDelaySeconds: 10

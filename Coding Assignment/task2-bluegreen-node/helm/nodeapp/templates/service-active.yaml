@@ -1,0 +1,17 @@
+# The "live" Service - its selector always points at whichever color is currently active.
+# Cutover = helm upgrade with --set activeColor=green (no pod restart needed, just a
+# selector swap, so it's instant and safely reversible).
+apiVersion: v1
+kind: Service
+metadata:
+  name: nodeapp-active-svc
+  labels:
+    app: nodeapp
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: nodeapp
+    color: {{ .Values.activeColor }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}

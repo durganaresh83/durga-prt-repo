@@ -1,0 +1,67 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION   = 'us-east-1'
+        CLUSTER_NAME = 'microservices-dev'
+        ECR_REGISTRY = '975050024946.dkr.ecr.us-east-1.amazonaws.com'
+        IMAGE_TAG    = "${env.BUILD_NUMBER}"
+    }
+
+    stages {
+
+        stage('Checkout') { steps { checkout scm } }
+
+        stage('Build, Test & Push') {
+            parallel {
+                stage('Backend') {
+                    steps {
+                        dir('task4-fullstack-react-node/backend') {
+                            sh '''
+                                npm install
+                                npm test
+                                docker build -t ${ECR_REGISTRY}/fullstack-react-node/backend:${IMAGE_TAG} .
+                                aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+                                docker push ${ECR_REGISTRY}/fullstack-react-node/backend:${IMAGE_TAG}
+                            '''
+                        }
+                    }
+                }
+                stage('Frontend') {
+                    steps {
+                        dir('task4-fullstack-react-node/frontend') {
+                            sh '''
+                                npm install
+                                npm test
+                                npm run build
+                                docker build -t ${ECR_REGISTRY}/fullstack-react-node/frontend:${IMAGE_TAG} .
+                                aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+                                docker push ${ECR_REGISTRY}/fullstack-react-node/frontend:${IMAGE_TAG}
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Deploy both services to EKS') {
+            steps {
+                sh '''
+                    aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
+                    kubectl apply -f task4-fullstack-react-node/k8s/namespace.yaml
+
+                    sed "s|REPLACE_BACKEND_IMAGE|${ECR_REGISTRY}/fullstack-react-node/backend:${IMAGE_TAG}|" \
+                        task4-fullstack-react-node/k8s/backend-deployment.yaml | kubectl apply -f -
+                    kubectl apply -f task4-fullstack-react-node/k8s/backend-service.yaml
+
+                    sed "s|REPLACE_FRONTEND_IMAGE|${ECR_REGISTRY}/fullstack-react-node/frontend:${IMAGE_TAG}|" \
+                        task4-fullstack-react-node/k8s/frontend-deployment.yaml | kubectl apply -f -
+                    kubectl apply -f task4-fullstack-react-node/k8s/frontend-service.yaml
+
+                    kubectl rollout status deployment/backend -n fullstack-app --timeout=120s
+                    kubectl rollout status deployment/frontend -n fullstack-app --timeout=120s
+                '''
+            }
+        }
+    }
+}

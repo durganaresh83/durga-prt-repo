@@ -1,0 +1,17 @@
+# One "static" service per color - useful for smoke-testing a color directly
+# before it becomes the live/active target (e.g. nodeapp-green-svc.namespace.svc.cluster.local).
+apiVersion: v1
+kind: Service
+metadata:
+  name: nodeapp-{{ .Values.color }}-svc
+  labels:
+    app: nodeapp
+    color: {{ .Values.color }}
+spec:
+  type: ClusterIP
+  selector:
+    app: nodeapp
+    color: {{ .Values.color }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}

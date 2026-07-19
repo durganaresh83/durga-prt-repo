@@ -1,0 +1,10 @@
+# Ensures the Cluster Autoscaler / node drains never take down too many pods at once
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ha-app-pdb
+  namespace: ha-app
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: { app: ha-app }

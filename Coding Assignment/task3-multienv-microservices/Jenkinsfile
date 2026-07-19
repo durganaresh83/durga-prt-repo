@@ -1,0 +1,100 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = 'us-east-1'
+        ECR_REGISTRY = '975050024946.dkr.ecr.us-east-1.amazonaws.com'
+        IMAGE_TAG  = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : env.BUILD_NUMBER}"
+    }
+
+    stages {
+
+        stage('Checkout') { steps { checkout scm } }
+
+        stage('Build & Test Services') {
+            matrix {
+                axes {
+                    axis {
+                        name 'SERVICE'
+                        values 'service-a', 'service-b'
+                    }
+                }
+                stages {
+                    stage('Unit test') {
+                        steps {
+                            dir("task3-multienv-microservices/services/${SERVICE}") {
+                                sh '''
+                                    python3 -m venv venv && . venv/bin/activate
+                                    pip install -r requirements.txt
+                                    python -c "import app" # smoke import check; add real pytest suite here
+                                '''
+                            }
+                        }
+                    }
+                    stage('Build & push image') {
+                        steps {
+                            script {
+                                def repo = "${env.ECR_REGISTRY}/microservices/${SERVICE}"
+                                dir("task3-multienv-microservices/services/${SERVICE}") {
+                                    sh """
+                                        docker build -t ${repo}:${IMAGE_TAG} .
+                                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${env.ECR_REGISTRY}
+                                        docker push ${repo}:${IMAGE_TAG}
+                                    """
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- The SAME image tag (built once above) is promoted through envs ----
+        // This is the core of the promotion strategy: never rebuild between environments,
+        // only re-deploy the already-tested artifact.
+
+        stage('Deploy to dev') {
+            steps {
+                script { deployToEnv('dev') }
+            }
+        }
+
+        stage('Approve promotion to staging') {
+            steps {
+                input message: "Promote build ${IMAGE_TAG} from dev to staging?", ok: 'Promote'
+            }
+        }
+
+        stage('Deploy to staging') {
+            steps {
+                script { deployToEnv('staging') }
+            }
+        }
+
+        stage('Approve promotion to prod') {
+            steps {
+                input message: "Promote build ${IMAGE_TAG} from staging to prod?", ok: 'Promote', submitter: 'release-managers'
+            }
+        }
+
+        stage('Deploy to prod') {
+            steps {
+                script { deployToEnv('prod') }
+            }
+        }
+    }
+}
+
+// Applies the kustomize overlay for the given environment, pinning both services
+// to the image tag that was built (and already tested in the previous env) once.
+def deployToEnv(String envName) {
+    sh """
+        aws eks update-kubeconfig --region ${AWS_REGION} --name microservices-${envName}
+        cd task3-multienv-microservices/k8s/${envName}
+        kustomize edit set image REPLACE_service-a_IMAGE=${env.ECR_REGISTRY}/microservices/service-a:${IMAGE_TAG}
+        kustomize edit set image REPLACE_service-b_IMAGE=${env.ECR_REGISTRY}/microservices/service-b:${IMAGE_TAG}
+        kubectl apply -k .
+        kubectl rollout status deployment/service-a -n ${envName} --timeout=120s
+        kubectl rollout status deployment/service-b -n ${envName} --timeout=120s
+    """
+}

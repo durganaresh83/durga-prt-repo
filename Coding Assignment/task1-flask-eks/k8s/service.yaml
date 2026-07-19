@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: durga-prt-flask-app-svc
+  namespace: durga-prt-flask-app
+spec:
+  type: LoadBalancer
+  selector:
+    app: durga-prt-flask-app
+  ports:
+    - port: 80
+      targetPort: 5000
+      protocol: TCP

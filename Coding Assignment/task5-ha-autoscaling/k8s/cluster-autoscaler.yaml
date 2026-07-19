@@ -1,0 +1,44 @@
+# Cluster Autoscaler deployment (adds/removes EC2 nodes based on unschedulable pods).
+# Requires: aws_iam_role.cluster_autoscaler (Terraform output cluster_autoscaler_role_arn)
+# annotated onto this ServiceAccount, and the node group ASG tagged
+# k8s.io/cluster-autoscaler/enabled=true (done in terraform/main.tf).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  annotations:
+    eks.amazonaws.com/role-arn: REPLACE_WITH_cluster_autoscaler_role_arn_OUTPUT
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  labels: { app: cluster-autoscaler }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: cluster-autoscaler }
+  template:
+    metadata:
+      labels: { app: cluster-autoscaler }
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+    spec:
+      serviceAccountName: cluster-autoscaler
+      containers:
+        - name: cluster-autoscaler
+          image: registry.k8s.io/autoscaling/cluster-autoscaler:v1.36.0
+          command:
+            - ./cluster-autoscaler
+            - --v=4
+            - --cloud-provider=aws
+            - --skip-nodes-with-local-storage=false
+            - --expander=least-waste
+            - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/microservices-dev
+            - --balance-similar-node-groups
+            - --skip-nodes-with-system-pods=false
+          resources:
+            requests: { cpu: 100m, memory: 300Mi }
+            limits:   { cpu: 100m, memory: 300Mi }

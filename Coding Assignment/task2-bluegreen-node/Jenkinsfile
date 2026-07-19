@@ -1,0 +1,90 @@
+pipeline {
+    agent any
+
+    parameters {
+        choice(name: 'TARGET_COLOR', choices: ['green', 'blue'], description: 'Which environment to deploy the new build into (the currently-idle color)')
+        booleanParam(name: 'SWITCH_TRAFFIC', defaultValue: false, description: 'After a successful smoke test, cut live traffic over to TARGET_COLOR')
+    }
+
+    environment {
+        AWS_REGION   = 'us-east-1'
+        ECR_REPO     = '975050024946.dkr.ecr.us-east-1.amazonaws.com/durga-prt-flask-eks-demo-app'
+        CLUSTER_NAME = 'durga-prt-flask-eks-demo'
+        NAMESPACE    = 'nodeapp'
+        IMAGE_TAG    = "${env.BUILD_NUMBER}"
+    }
+
+    stages {
+
+        stage('Checkout') { steps { checkout scm } }
+
+        stage('Install & Test') {
+            steps {
+                dir('task2-bluegreen-node/app') {
+                    sh 'npm ci && npm test'
+                }
+            }
+        }
+
+        stage('Build & Push Image') {
+            steps {
+                dir('task2-bluegreen-node/app') {
+                    sh '''
+                        docker build -t ${ECR_REPO}:${IMAGE_TAG} .
+                        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
+                        docker push ${ECR_REPO}:${IMAGE_TAG}
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to idle color') {
+            steps {
+                sh '''
+                    aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
+                    kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+
+                    helm upgrade --install nodeapp-${TARGET_COLOR} task2-bluegreen-node/helm/nodeapp \
+                        --namespace $NAMESPACE \
+                        -f task2-bluegreen-node/helm/nodeapp/values-${TARGET_COLOR}.yaml \
+                        --set image.repository=${ECR_REPO} \
+                        --set image.tag=${IMAGE_TAG} \
+                        --set activeColor=$(kubectl get svc nodeapp-active-svc -n $NAMESPACE -o jsonpath="{.spec.selector.color}" 2>/dev/null || echo blue) \
+                        --wait --timeout 3m
+                '''
+            }
+        }
+
+        stage('Smoke test idle color') {
+            steps {
+                sh '''
+                    kubectl run smoke-test-${BUILD_NUMBER} --rm -i --restart=Never --namespace $NAMESPACE \
+                        --image=curlimages/curl -- \
+                        curl -sf http://nodeapp-${TARGET_COLOR}-svc.${NAMESPACE}.svc.cluster.local/healthz
+                '''
+            }
+        }
+
+        stage('Switch traffic (Blue-Green cutover)') {
+            when { expression { return params.SWITCH_TRAFFIC } }
+            steps {
+                sh '''
+                    helm upgrade nodeapp-${TARGET_COLOR} task2-bluegreen-node/helm/nodeapp \
+                        --namespace $NAMESPACE \
+                        -f task2-bluegreen-node/helm/nodeapp/values-${TARGET_COLOR}.yaml \
+                        --set image.repository=${ECR_REPO} \
+                        --set image.tag=${IMAGE_TAG} \
+                        --set activeColor=${TARGET_COLOR} \
+                        --wait --timeout 2m
+                '''
+                echo "Live traffic is now served by the ${params.TARGET_COLOR} environment."
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo 'Pipeline failed before or during cutover - the previously active color was never touched, so production traffic is unaffected.'
+        }
+    }
+}

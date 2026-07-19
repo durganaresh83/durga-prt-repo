@@ -1,0 +1,77 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION   = 'us-east-1'
+        ECR_REPO     = '975050024946.dkr.ecr.us-east-1.amazonaws.com/ha-autoscale-demo'
+        CLUSTER_NAME = 'microservices-dev'
+        IMAGE_TAG    = "${env.BUILD_NUMBER}"
+    }
+
+    stages {
+
+        stage('Checkout') { steps { checkout scm } }
+
+        stage('Install & Test') {
+            steps {
+                dir('task5-ha-autoscaling/app') {
+                    sh '''
+                        python3 -m venv venv && . venv/bin/activate
+                        pip install -r requirements.txt
+                        python -c "import app"   # smoke import; extend with pytest as needed
+                    '''
+                }
+            }
+        }
+
+        stage('Build & Push Image') {
+            steps {
+                dir('task5-ha-autoscaling/app') {
+                    sh '''
+                        docker build -t ${ECR_REPO}:${IMAGE_TAG} .
+                        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
+                        docker push ${ECR_REPO}:${IMAGE_TAG}
+                    '''
+                }
+            }
+        }
+
+        stage('Ensure autoscaling add-ons') {
+            steps {
+                sh '''
+                    aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
+
+                    # metrics-server (idempotent - HPA depends on this being present)
+                    kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+                    # Cluster Autoscaler (idempotent)
+                    kubectl apply -f task5-ha-autoscaling/k8s/cluster-autoscaler.yaml
+                '''
+            }
+        }
+
+        stage('Deploy app + HPA + PDB') {
+            steps {
+                sh '''
+                    sed -i "s|REPLACE_WITH_ECR_IMAGE_URI:REPLACE_WITH_TAG|${ECR_REPO}:${IMAGE_TAG}|g" task5-ha-autoscaling/k8s/deployment.yaml
+                    kubectl apply -f task5-ha-autoscaling/k8s/namespace.yaml
+                    kubectl apply -f task5-ha-autoscaling/k8s/deployment.yaml
+                    kubectl apply -f task5-ha-autoscaling/k8s/service.yaml
+                    kubectl apply -f task5-ha-autoscaling/k8s/pdb.yaml
+                    kubectl apply -f task5-ha-autoscaling/k8s/hpa.yaml
+                    kubectl rollout status deployment/ha-app -n ha-app --timeout=120s
+                '''
+            }
+        }
+
+        stage('Verify scaling config') {
+            steps {
+                sh '''
+                    kubectl get hpa ha-app-hpa -n ha-app
+                    kubectl get pdb ha-app-pdb -n ha-app
+                    kubectl get deployment cluster-autoscaler -n kube-system
+                '''
+            }
+        }
+    }
+}
