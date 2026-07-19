@@ -1,0 +1,7 @@
+
+FullName
+--------
+C:\Durga Naresh\HeroVired\Assignments\Placement_Readiness_Test\durga-prt-repo\Coding Assignment\task4-fullstack-react-node\backend\node_modules
+C:\Durga Naresh\HeroVired\Assignments\Placement_Readiness_Test\durga-prt-repo\Coding Assignment\task4-fullstack-react-node\backend\node_modules\send\node_modules
+C:\Durga Naresh\HeroVired\Assignments\Placement_Readiness_Test\durga-prt-repo\Coding Assignment\task4-fullstack-react-node\frontend\node_modules
+

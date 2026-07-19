@@ -1,0 +1,16 @@
+# Ignore Terraform local state and provider downloads
+.terraform/
+**/.terraform/
+
+# Ignore node modules
+**/node_modules/
+
+# Ignore local IDE files and OS junk
+.vscode/
+*.log
+*.tmp
+*.pyc
+.DS_Store
+
+# Ignore terraform provider binaries (safety)
+.terraform/providers/

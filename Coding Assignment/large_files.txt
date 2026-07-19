@@ -1,0 +1,7 @@
+
+FullName                                                                                                                                                                                                                                                     SizeMB
+--------                                                                                                                                                                                                                                                     ------
+C:\Durga Naresh\HeroVired\Assignments\Placement_Readiness_Test\durga-prt-repo\Coding Assignment\task1-flask-eks\terraform\.terraform\providers\registry.terraform.io\hashicorp\aws\5.100.0\windows_amd64\terraform-provider-aws_v5.100.0_x5.exe              685.52
+C:\Durga Naresh\HeroVired\Assignments\Placement_Readiness_Test\durga-prt-repo\Coding Assignment\task2-bluegreen-node\terraform\.terraform\providers\registry.terraform.io\hashicorp\aws\5.100.0\windows_amd64\terraform-provider-aws_v5.100.0_x5.exe         685.52
+C:\Durga Naresh\HeroVired\Assignments\Placement_Readiness_Test\durga-prt-repo\Coding Assignment\task3-multienv-microservices\terraform\.terraform\providers\registry.terraform.io\hashicorp\aws\5.100.0\windows_amd64\terraform-provider-aws_v5.100.0_x5.exe 685.52
+
