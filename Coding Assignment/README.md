@@ -75,9 +75,15 @@ terraform init
 terraform workspace new dev
 terraform apply -var-file=environments/dev.tfvars
 ```
+<img width="1540" height="702" alt="image" src="https://github.com/user-attachments/assets/a0ad1fe3-cab0-4bb3-9cb2-e2a3d7f07463" />
+
 ## 2. Services and Dockerfiles
 `services/service-a` and `services/service-b` are minimal, independently-deployable Flask
 apps with `/` and `/healthz`, each with its own Dockerfile (non-root user, slim base image).
+
+<img width="1570" height="410" alt="image" src="https://github.com/user-attachments/assets/48fa52de-329b-49d7-99a4-39a76821c42a" />
+
+<img width="937" height="110" alt="image" src="https://github.com/user-attachments/assets/5b1703f0-da01-461b-8e19-8e67845cae3a" />
 
 ## 3. Kubernetes manifests (Kustomize base + overlays)
 `k8s/base/` holds the environment-agnostic Deployment/Service definitions. Each environment
@@ -87,5 +93,86 @@ overlay (`k8s/dev`, `k8s/staging`, `k8s/prod`):
 - sets replica counts appropriate to that environment (1 / 2 / 3),
 - and (via the pipeline, using `kustomize edit set image`) pins the exact image tag being promoted.
 
+<img width="1552" height="751" alt="image" src="https://github.com/user-attachments/assets/0bbb88e6-3a7f-4fc0-92c0-47338c9dc9b6" />
+
+# The same Terraform code can be reused and can create multiple environments.
+
+# Task 4 — React Frontend + Node Backend, Shared CI/CD on EKS
+
+## Structure
+```
+task4-fullstack-react-node/
+├── terraform/
+│   ├── main.tf                  # root module, wires up shared cluster
+│   └── modules/eks-base/        # reusable VPC+EKS+ECR module (one repo per service)
+├── frontend/                    # React (Vite) + nginx Dockerfile
+├── backend/                     # Node/Express API + Dockerfile
+├── k8s/                         # Deployments + Services for both
+└── Jenkinsfile                  # builds/tests/deploys both in parallel
+```
+
+## 1. Provision shared infrastructure
+```bash
+cd terraform
+terraform init
+terraform apply
+```
+
+```bash
+aws eks update-kubeconfig --region us-east-1 --name microservices-dev
+```
+## 2. Frontend & backend
+- `backend/` — Express API (`/api/hello`, `/healthz`), Alpine-based Dockerfile.
+- `frontend/` — React app built with Vite, served by nginx in production. `nginx.conf`
+  proxies `/api/*` to `backend-svc:4000` inside the cluster, so the browser only ever talks
+  to one origin (no CORS issues in production, and no API URL to hardcode/rebuild for).
+
+Local dev:
+```bash
+cd backend && npm install && npm start        # localhost:4000
+cd frontend && npm install && npm run dev      # localhost:5173, proxies to backend in dev
+```
+
+## 3. Jenkins pipeline (shared, parallelized)
+Stages: **Checkout → [Backend build/test/push] ∥ [Frontend build/test/push] (parallel) →
+Deploy both to EKS.**
+
+<img width="1247" height="177" alt="image" src="https://github.com/user-attachments/assets/67eaa096-7ba9-489d-a719-2907369432c3" />
+
+# Backend Images
+<img width="1562" height="455" alt="image" src="https://github.com/user-attachments/assets/ae15357f-49f8-43a4-ac6e-6cf7be7b9d2d" />
+
+# Frontend Images
+<img width="1551" height="447" alt="image" src="https://github.com/user-attachments/assets/3bcb13c5-9653-4b64-8420-4e3850dc59e1" />
 
 
+## 4. Kubernetes manifests
+- `backend-deployment.yaml` / `backend-service.yaml` — 2 replicas, `ClusterIP` (internal
+  only — never exposed directly to the internet).
+- `frontend-deployment.yaml` / `frontend-service.yaml` — 2 replicas, `LoadBalancer` (the
+  only public entry point; nginx inside it reverse-proxies API calls to the backend).
+
+<img width="1481" height="757" alt="image" src="https://github.com/user-attachments/assets/93ddedd9-52c9-46f5-afdc-a2375ad867df" />
+
+## 5. Verify
+
+kubectl get pods -n fullstack-app <br>
+kubectl get svc frontend-svc -n fullstack-app <br>
+curl http://<FRONTEND-EXTERNAL-IP>/ <br>
+
+<img width="1280" height="552" alt="image" src="https://github.com/user-attachments/assets/34072719-c1f2-4a03-993e-2a644423217b" />
+
+curl http://<FRONTEND-EXTERNAL-IP>/api/hello <br>
+
+<img width="1311" height="367" alt="image" src="https://github.com/user-attachments/assets/9e3f5c34-212f-4443-aceb-10b33df07bc0" />
+
+
+
+
+
+
+
+  
+
+
+  
