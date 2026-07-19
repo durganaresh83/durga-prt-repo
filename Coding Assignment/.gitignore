@@ -1,6 +1,8 @@
 # Ignore Terraform local state and provider downloads
 .terraform/
-**/.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
 
 # Ignore node modules
 **/node_modules/
