@@ -16,6 +16,8 @@
 
 # Task 2.  Blue-Green Deployment on EKS using Jenkins and Helm
 
+<img width="292" height="382" alt="image" src="https://github.com/user-attachments/assets/43e291f8-1ecf-42bc-a190-e4788271909c" />
+
 <img width="1537" height="615" alt="image" src="https://github.com/user-attachments/assets/58703e8f-5b4b-4cb9-bd8e-3b25d52c23bc" />
 
 ## 1. How Blue-Green works here
@@ -44,5 +46,46 @@ helm upgrade --install nodeapp-blue helm/nodeapp \
 This creates the blue Deployment and points `nodeapp-active-svc` at it — blue is now live.
 
 <img width="1407" height="692" alt="image" src="https://github.com/user-attachments/assets/fff0ce44-741a-484a-a111-1164b1ddba06" />
+
+<img width="1576" height="450" alt="image" src="https://github.com/user-attachments/assets/f239fe45-02d1-468e-b602-228f8452b19c" />
+
+
+# Task 3 — Multi-Environment Microservices Pipeline on EKS
+
+<img width="322" height="437" alt="image" src="https://github.com/user-attachments/assets/6228fb52-f1c5-4157-9c5b-f095a3a6b19a" />
+
+## Structure
+```
+task3-multienv-microservices/
+├── terraform/
+│   ├── main.tf, variables.tf         # keyed off terraform.workspace
+│   └── environments/{dev,staging,prod}.tfvars
+├── services/{service-a,service-b}/   # independent Flask microservices + Dockerfiles
+├── k8s/
+│   ├── base/                         # shared Deployment/Service (kustomize base)
+│   └── {dev, staging, prod}/           # kustomize overlays: namespace, replica counts, image tags
+└── Jenkinsfile
+```
+
+## 1. Provision infrastructure per environment (Terraform workspaces)
+```bash
+cd terraform
+terraform init
+
+terraform workspace new dev
+terraform apply -var-file=environments/dev.tfvars
+```
+## 2. Services and Dockerfiles
+`services/service-a` and `services/service-b` are minimal, independently-deployable Flask
+apps with `/` and `/healthz`, each with its own Dockerfile (non-root user, slim base image).
+
+## 3. Kubernetes manifests (Kustomize base + overlays)
+`k8s/base/` holds the environment-agnostic Deployment/Service definitions. Each environment
+overlay (`k8s/dev`, `k8s/staging`, `k8s/prod`):
+- sets its own `namespace` (`dev`/`staging`/`prod`),
+- patches the `ENVIRONMENT` env var into the containers,
+- sets replica counts appropriate to that environment (1 / 2 / 3),
+- and (via the pipeline, using `kustomize edit set image`) pins the exact image tag being promoted.
+
 
 
